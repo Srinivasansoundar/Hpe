@@ -6,3 +6,5 @@ sqlalchemy
 psycopg2-binary
 scipy
 statsmodels
+river
+python-dotenv
