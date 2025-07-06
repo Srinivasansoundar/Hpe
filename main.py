@@ -417,8 +417,8 @@ async def detect_residual_drift(
         end_dt = pd.to_datetime(end)
         window_data = raw_data[(raw_data['Date'] >= start_dt) & (raw_data['Date'] <= end_dt)]
 
-        # Step 4: Apply Page-Hinkley on residuals
-        ph = PageHinkley(min_instances=30, delta=0.1, threshold=0.1)
+        # Step 4: Apply Page-Hinkley on trend
+        ph = PageHinkley(min_instances=30, delta=1.0, threshold=5.0)
         drift_flags = []
         for val in window_data['Trend']:
             ph.update(val)
