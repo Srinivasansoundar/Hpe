@@ -392,12 +392,11 @@ async def detect_seasonal_drift(
 
 
 
-
 @app.get("/trend_drift")
 @app.head("/trend_drift")
-async def detect_residual_drift(
-    start: str = Query(..., description="Start date for drift detection (YYYY-MM-DD)"),
-    end: str = Query(..., description="End date for drift detection (YYYY-MM-DD)")
+async def detect_trend_drift(
+    start: str = Query(None, description="Start date for drift detection (YYYY-MM-DD)"),
+    end: str = Query(None, description="End date for drift detection (YYYY-MM-DD)")
 ):
     try:
         # Step 1: Load & preprocess data
@@ -405,26 +404,35 @@ async def detect_residual_drift(
         raw_data['Usage'] = raw_data['Usage'].astype(str).str.replace(",", "").astype(float)
         raw_data['Date'] = pd.to_datetime(raw_data['Dates'], format='%d-%m-%Y')
         raw_data.sort_values('Date', inplace=True)
-        raw_data['Usage'] = raw_data['Usage']
 
         # Step 2: Seasonal decomposition
         decomp = seasonal_decompose(raw_data['Usage'], model='additive', period=30)
         raw_data['Trend'] = decomp.trend
         raw_data.dropna(subset=['Trend'], inplace=True)
 
-        # Step 3: Define window
-        start_dt = pd.to_datetime(start)
-        end_dt = pd.to_datetime(end)
+        # Step 3: Handle default date range (last 60 days if not specified)
+        max_date = raw_data['Date'].max()
+        if not end:
+            end_dt = max_date
+        else:
+            end_dt = pd.to_datetime(end)
+
+        if not start:
+            start_dt = end_dt - timedelta(days=60)
+        else:
+            start_dt = pd.to_datetime(start)
+
+        # Step 4: Filter window
         window_data = raw_data[(raw_data['Date'] >= start_dt) & (raw_data['Date'] <= end_dt)]
 
-        # Step 4: Apply Page-Hinkley on trend
+        # Step 5: Apply Page-Hinkley on trend
         ph = PageHinkley(min_instances=30, delta=1.0, threshold=5.0)
         drift_flags = []
         for val in window_data['Trend']:
             ph.update(val)
             drift_flags.append(ph.drift_detected)
 
-        # Step 5: Format results
+        # Step 6: Format results
         results = []
         for i, (idx, row) in enumerate(window_data.iterrows()):
             results.append({
@@ -435,12 +443,10 @@ async def detect_residual_drift(
                 "drift_detected": bool(drift_flags[i])
             })
 
-
         return results
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Drift detection failed: {str(e)}")
-
 
 @app.get("/residual_drift", include_in_schema=True)
 @app.head("/residual_drift", include_in_schema=True)
